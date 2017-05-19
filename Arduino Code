@@ -1,0 +1,122 @@
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h> //For LCD
+#include <OneWire.h> // for temp probes
+#include <DallasTemperature.h> //for temp probes
+
+LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Set the LCD I2C address
+#define ONE_WIRE_BUS 2 // temp sensor Data wire is plugged into pin 2 on the Arduino
+OneWire oneWire(ONE_WIRE_BUS); // Setup a oneWire instance to communicate with any OneWire devices
+DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Temperature.
+
+//RELAY setup
+#define BUTTON 4 //water change button pin 4
+#define DRAINVALVE 7 //Solenoid valve to drain main tank pin 7
+#define TOPUPPUMP 8 //Pump to top up main tank from top up tank pin 8
+#define CANISTER 9 //Canister Filter pump Relay pin 9
+#define TOPUPHEATER 10 //HEater for Top Up Tank pin 10
+
+//States setup
+#define TANK_IDLE 0
+#define TANK_DRAINING 1
+#define TANK_FILLING 2
+
+// Sensors Setup
+#define TOPFLOAT  5 //define sensor pin for top float switch
+#define BOTTOMFLOAT 6 //define sensor pin for low float switch
+
+
+void setup()   /*----( SETUP: RUNS ONCE )----*/
+{
+  Serial.begin(9600);  // Used to type in characters
+
+  //set pins as inputs for float switches and button, no need for external resistor
+  pinMode(BUTTON, INPUT_PULLUP);
+  pinMode(TOPFLOAT, INPUT_PULLUP);
+  pinMode(BOTTOMFLOAT, INPUT_PULLUP);
+
+  //set pins as output for relays
+  pinMode(DRAINVALVE, OUTPUT);
+  pinMode(TOPUPPUMP, OUTPUT);
+  pinMode(CANISTER, OUTPUT);
+  pinMode(TOPUPHEATER, OUTPUT);
+
+  //sets default relay states
+  digitalWrite(DRAINVALVE, HIGH);
+  digitalWrite(TOPUPPUMP, HIGH);
+  digitalWrite(CANISTER, LOW);
+  digitalWrite(TOPUPHEATER, HIGH);
+  //starts with canister on, all other relays off
+
+  lcd.begin(20, 4);        // initialize the lcd for 20 chars 4 lines, turn on backlight
+
+}/*--(end setup )---*/
+
+
+void loop()   /*----( LOOP: RUNS CONSTANTLY )----*/
+
+
+{
+
+
+  sensors.requestTemperatures(); // Send the command to get temperature readings
+
+  lcd.setCursor(0, 0); //Start at character 4 on line 0
+  lcd.print("Tank Temp:");
+  lcd.print(sensors.getTempCByIndex(1));
+  lcd.setCursor(0, 1); //Start at character 4 on line 0
+  lcd.print("Topup Temp:");
+  lcd.print(sensors.getTempCByIndex(0));
+  // You can have more than one DS18B20 on the same bus.
+  // 0 refers to the first IC on the wire
+
+  static int state = TANK_IDLE; // initial state is the idle state
+  static unsigned long ts;  // To store the "current" time in for delays.
+
+  switch (state)
+  {
+    case TANK_IDLE:
+      digitalWrite(DRAINVALVE, HIGH);
+      digitalWrite(TOPUPPUMP, HIGH);
+      digitalWrite(CANISTER, LOW);
+      digitalWrite(TOPUPHEATER, HIGH);
+      lcd.setCursor(0, 3); // bottom line of lcd
+      lcd.print("Tank Idle    "); //display message
+      if (digitalRead(BUTTON) == LOW)
+      {
+        state = TANK_DRAINING;
+      }
+      else if (digitalRead(TOPFLOAT) == LOW)
+      {
+        state = TANK_FILLING;
+      }
+      break;
+
+    case TANK_DRAINING:
+
+      digitalWrite(DRAINVALVE, LOW);
+      digitalWrite(TOPUPPUMP, HIGH);
+      digitalWrite(CANISTER, HIGH);
+      digitalWrite(TOPUPHEATER, HIGH);
+      lcd.setCursor(0, 3); // bottom line of lcd
+      lcd.print("Draining Tank   "); //display message
+      if (digitalRead(BOTTOMFLOAT) == LOW)
+      {
+        state = TANK_FILLING;
+      }
+      break;
+
+    case TANK_FILLING:
+      digitalWrite(DRAINVALVE, HIGH);
+      digitalWrite(TOPUPPUMP, LOW);
+      digitalWrite(CANISTER, HIGH);
+      digitalWrite(TOPUPHEATER, HIGH);
+      lcd.setCursor(0, 3); // bottom line of lcd
+      lcd.print("Filling Tank   "); //display message
+      if (digitalRead(TOPFLOAT) == HIGH)
+      {
+        state = TANK_IDLE;
+      }
+      break;
+  }
+}
